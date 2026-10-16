@@ -1125,11 +1125,26 @@ fn decrypt_optional_field(
 
 impl NautermDatabase {
     pub fn open_default() -> rusqlite::Result<Self> {
+        #[cfg(target_os = "android")]
+        return Err(rusqlite::Error::InvalidPath(PathBuf::from(
+            "Android requires an explicit app-private database path",
+        )));
+        #[cfg(not(target_os = "android"))]
         Self::open(default_database_path())
     }
 
     pub fn open(path: impl AsRef<Path>) -> rusqlite::Result<Self> {
         let path = path.as_ref();
+        #[cfg(target_os = "android")]
+        if path.exists() {
+            crate::android_credentials::require_existing_key(
+                crate::crypto::KEYRING_DATABASE_KEY_ACCOUNT,
+            )
+            .map_err(crypto_sql_error)?;
+        }
+        #[cfg(target_os = "android")]
+        // Validate durable credential storage before SQLite can create a file.
+        let _ = crate::crypto::load_or_create_database_key().map_err(crypto_sql_error)?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|_| rusqlite::Error::InvalidPath(parent.to_path_buf()))?;

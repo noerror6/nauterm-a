@@ -635,6 +635,9 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
 }
 
 TerminalConfig currentTerminalConfig() {
+  final backend = Platform.isAndroid
+      ? TerminalEmulatorBackend.alacritty
+      : terminalEmulatorBackend;
   return defaultTerminalConfig.copyWith(
     font: terminalFontConfig,
     keyboard: terminalKeyboardConfig,
@@ -652,7 +655,7 @@ TerminalConfig currentTerminalConfig() {
     sshKeepaliveIntervalSeconds: terminalSshKeepaliveIntervalSeconds,
     sshPredictionMode: terminalSshPredictionMode,
     emulation: TerminalEmulationConfig(type: terminalEmulationType),
-    emulatorBackend: terminalEmulatorBackend,
+    emulatorBackend: backend,
     moshPredictionMode: terminalMoshPredictionMode,
     osc52Mode: terminalOsc52Mode,
   );

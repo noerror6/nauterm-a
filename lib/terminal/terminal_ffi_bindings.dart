@@ -936,6 +936,7 @@ int _serialFlowControlToNative(SerialFlowControl flowControl) {
 
 List<String> _libraryCandidates() {
   final name = _libraryName();
+  if (Platform.isAndroid) return [name];
   final separator = Platform.pathSeparator;
   final root = Directory.current.path;
   final executableDirectory = File(Platform.resolvedExecutable).parent.path;

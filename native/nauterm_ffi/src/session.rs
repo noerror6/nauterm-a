@@ -545,17 +545,25 @@ impl SessionManager {
         rows: usize,
         options: TerminalOptions,
     ) -> Option<SessionId> {
-        let id = self.insert_new(
-            columns,
-            rows,
-            SessionTransport::Local,
-            options,
-            Vec::new(),
-            None,
-            false,
-            true,
-        );
-        (id != 0).then_some(id)
+        #[cfg(target_os = "android")]
+        {
+            let _ = (columns, rows, options);
+            return None;
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let id = self.insert_new(
+                columns,
+                rows,
+                SessionTransport::Local,
+                options,
+                Vec::new(),
+                None,
+                false,
+                true,
+            );
+            (id != 0).then_some(id)
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

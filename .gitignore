@@ -37,6 +37,7 @@ migrate_working_dir/
 
 # Rust native layer
 native/**/target/
+/android/app/src/main/jniLibs/
 
 # Symbolication related
 app.*.symbols

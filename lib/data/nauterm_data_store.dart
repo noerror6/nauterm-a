@@ -2844,6 +2844,7 @@ int? _dateTimeToJson(DateTime? value) => value?.toUtc().millisecondsSinceEpoch;
 
 List<String> _libraryCandidates() {
   final name = _libraryName();
+  if (Platform.isAndroid) return [name];
   final separator = Platform.pathSeparator;
   final root = Directory.current.path;
   final executableDirectory = File(Platform.resolvedExecutable).parent.path;

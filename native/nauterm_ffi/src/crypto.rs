@@ -5,6 +5,7 @@
 //     macOS   → Keychain (Security framework)
 //     Windows → Credential Manager
 //     Linux   → Secret Service (libsecret)
+//     Android → platform bridge backed by Android Keystore
 //   SQLCipher    → encrypts the complete local SQLite database
 //   Provider credentials → stored only inside that SQLCipher database
 //   Master Key   → never persisted; the sync module uses it only to wrap/unwrap the Sync DEK
@@ -14,6 +15,7 @@
 // retained temporarily while their old FFI surface is removed.
 
 use std::fmt;
+#[cfg(not(target_os = "android"))]
 use std::sync::{Mutex, OnceLock};
 
 use aes_gcm::aead::{Aead, KeyInit};
@@ -29,7 +31,7 @@ use zeroize::Zeroizing;
 #[cfg(all(feature = "test-credential-store", not(debug_assertions)))]
 compile_error!("test-credential-store must never be enabled in release builds");
 
-#[cfg(not(feature = "test-credential-store"))]
+#[cfg(all(not(feature = "test-credential-store"), not(target_os = "android")))]
 pub const KEYRING_SERVICE: &str = "com.korvect.nauterm";
 pub const KEYRING_DEVICE_KEY_ACCOUNT: &str = "device-key";
 pub const KEYRING_DATABASE_KEY_ACCOUNT: &str = "local-database-key";
@@ -59,8 +61,10 @@ fn fill_random(bytes: &mut [u8]) {
     getrandom::fill(bytes).expect("operating system random source is unavailable");
 }
 
+#[cfg(not(target_os = "android"))]
 static DATABASE_KEY_CACHE: OnceLock<Mutex<Option<Zeroizing<[u8; AES_KEY_LENGTH]>>>> =
     OnceLock::new();
+#[cfg(not(target_os = "android"))]
 static DEVICE_KEY_CACHE: OnceLock<Mutex<Option<Zeroizing<[u8; AES_KEY_LENGTH]>>>> = OnceLock::new();
 
 // app_metadata keys
@@ -112,6 +116,7 @@ impl From<base64::DecodeError> for CryptoError {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 impl From<keyring::Error> for CryptoError {
     fn from(err: keyring::Error) -> Self {
         Self::new(format!("keychain error: {err}"))
@@ -262,12 +267,12 @@ pub fn aes_open(key: &[u8; AES_KEY_LENGTH], sealed: &[u8]) -> Result<Vec<u8>, Cr
 // Device Key (system keychain)
 // ---------------------------------------------------------------------------
 
-#[cfg(not(feature = "test-credential-store"))]
+#[cfg(all(not(feature = "test-credential-store"), not(target_os = "android")))]
 fn keyring_entry(account: &str) -> Result<keyring::Entry, CryptoError> {
     keyring::Entry::new(KEYRING_SERVICE, account).map_err(CryptoError::from)
 }
 
-#[cfg(not(feature = "test-credential-store"))]
+#[cfg(all(not(feature = "test-credential-store"), not(target_os = "android")))]
 fn load_or_create_keyring_key(
     account: &str,
     description: &str,
@@ -302,6 +307,14 @@ fn load_or_create_keyring_key(
     }
 }
 
+#[cfg(all(target_os = "android", not(feature = "test-credential-store")))]
+fn load_or_create_keyring_key(
+    account: &str,
+    description: &str,
+) -> Result<Zeroizing<[u8; AES_KEY_LENGTH]>, CryptoError> {
+    crate::android_credentials::load_or_create_key(account, description)
+}
+
 #[cfg(feature = "test-credential-store")]
 fn load_or_create_keyring_key(
     account: &str,
@@ -316,12 +329,18 @@ fn load_or_create_keyring_key(
 }
 
 pub fn load_or_create_device_key() -> Result<Zeroizing<[u8; AES_KEY_LENGTH]>, CryptoError> {
+    #[cfg(target_os = "android")]
+    return load_or_create_keyring_key(KEYRING_DEVICE_KEY_ACCOUNT, "device key");
+    #[cfg(not(target_os = "android"))]
     load_or_create_cached_key(&DEVICE_KEY_CACHE, KEYRING_DEVICE_KEY_ACCOUNT, "device key")
 }
 
 /// Returns the per-device SQLCipher key. This key never leaves the operating system's
 /// credential store and is independent from the cross-device Sync DEK.
 pub fn load_or_create_database_key() -> Result<Zeroizing<[u8; AES_KEY_LENGTH]>, CryptoError> {
+    #[cfg(target_os = "android")]
+    return load_or_create_keyring_key(KEYRING_DATABASE_KEY_ACCOUNT, "database key");
+    #[cfg(not(target_os = "android"))]
     load_or_create_cached_key(
         &DATABASE_KEY_CACHE,
         KEYRING_DATABASE_KEY_ACCOUNT,
@@ -329,6 +348,7 @@ pub fn load_or_create_database_key() -> Result<Zeroizing<[u8; AES_KEY_LENGTH]>, 
     )
 }
 
+#[cfg(not(target_os = "android"))]
 fn load_or_create_cached_key(
     cache: &'static OnceLock<Mutex<Option<Zeroizing<[u8; AES_KEY_LENGTH]>>>>,
     account: &str,
@@ -520,6 +540,8 @@ pub fn encrypt_unprotected_sensitive_fields(
 pub fn unlock_with_device_key(connection: &Connection) -> Result<Dek, CryptoError> {
     let sealed = metadata_get(connection, META_DEK_DEVICE_SEALED)?
         .ok_or_else(|| CryptoError::new("This vault is only unlockable with a Master Key."))?;
+    #[cfg(target_os = "android")]
+    crate::android_credentials::require_existing_key(KEYRING_DEVICE_KEY_ACCOUNT)?;
     let device_key = load_or_create_device_key()?;
     open_dek_with_key(&sealed, &device_key)
 }

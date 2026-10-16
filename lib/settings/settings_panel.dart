@@ -1208,7 +1208,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
   }
 
   void _closeSettingsWindow(BuildContext context) {
-    if (defaultTargetPlatform != TargetPlatform.linux) {
+    if (defaultTargetPlatform != TargetPlatform.linux &&
+        defaultTargetPlatform != TargetPlatform.android) {
       final windowController = WindowScope.maybeOf(context);
       if (windowController is RegularWindowController) {
         hideSettingsNativeWindow();

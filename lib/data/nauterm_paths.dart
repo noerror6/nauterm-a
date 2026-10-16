@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path_provider/path_provider.dart';
+
 const _applicationDirectoryName = 'Nauterm';
 const _xdgApplicationDirectoryName = 'nauterm';
 
@@ -13,6 +15,19 @@ class NautermPaths {
   final Directory configDirectory;
   final Directory dataDirectory;
   final List<Directory> additionalThemeDirectories;
+
+  static NautermPaths? _androidPaths;
+
+  /// Call after the Flutter binding is ready, before resolving paths on Android.
+  static Future<void> initializeAndroid() async {
+    if (!Platform.isAndroid) return;
+    final directory = await getApplicationSupportDirectory();
+    _androidPaths = NautermPaths(
+      configDirectory: directory,
+      dataDirectory: directory,
+    );
+    await _androidPaths!.ensureCreated();
+  }
 
   File get configFile => File(_join(configDirectory.path, 'config.json'));
 
@@ -53,6 +68,10 @@ class NautermPaths {
   static NautermPaths resolve({
     PlatformEnvironment environment = const PlatformEnvironment(),
   }) {
+    if (Platform.isAndroid) {
+      return _androidPaths ??
+          (throw StateError('Call NautermPaths.initializeAndroid() before resolve().'));
+    }
     if (Platform.isMacOS) {
       final base = _homeRelative(
         environment,
