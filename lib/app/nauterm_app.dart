@@ -16,7 +16,7 @@ class NautermApp extends StatelessWidget {
     this.workspaceController,
     this.onStartWindowDrag,
     this.onToggleWindowMaximized,
-    this.settingsOverlay,
+    this.navigatorKey,
   });
 
   final VoidCallback onOpenSettings;
@@ -24,7 +24,7 @@ class NautermApp extends StatelessWidget {
   final NautermWorkspaceController? workspaceController;
   final VoidCallback? onStartWindowDrag;
   final VoidCallback? onToggleWindowMaximized;
-  final Widget? settingsOverlay;
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   @override
   Widget build(BuildContext context) {
@@ -47,14 +47,7 @@ class NautermApp extends StatelessWidget {
             theme: nautermTheme(Brightness.light),
             darkTheme: nautermTheme(Brightness.dark),
             themeMode: mode.toFlutterThemeMode(),
-            builder: settingsOverlay == null
-                ? null
-                : (context, child) => Stack(
-                    children: [
-                      if (child != null) child,
-                      Positioned.fill(child: settingsOverlay!),
-                    ],
-                  ),
+            navigatorKey: navigatorKey,
             home: NautermWorkspace(
               onOpenSettings: onOpenSettings,
               onOpenTerminalSettings: onOpenTerminalSettings ?? onOpenSettings,

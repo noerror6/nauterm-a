@@ -14,7 +14,7 @@ import 'settings/settings_panel.dart';
 import 'terminal/terminal_config.dart';
 import 'terminal/terminal_ffi.dart';
 import 'terminal/terminal_models.dart';
-import 'window/native_windowing.dart';
+import 'window/native_windowing.dart' as windowing;
 import 'workspace/nauterm_workspace.dart';
 
 Future<void> main() async {
@@ -48,13 +48,15 @@ const _credentialChannel = MethodChannel('com.korvect.nauterm/credential_keys');
 /// Install both encrypted keys before any native database or terminal opens.
 Future<void> _registerAndroidCredentials() async {
   final library = DynamicLibrary.open('libnauterm_ffi.so');
-  final register = library.lookupFunction<
-    Bool Function(Pointer<Utf8>, Pointer<Uint8>, IntPtr),
-    bool Function(Pointer<Utf8>, Pointer<Uint8>, int)
-  >('nauterm_android_register_credential_key');
+  final register = library
+      .lookupFunction<
+        Bool Function(Pointer<Utf8>, Pointer<Uint8>, IntPtr),
+        bool Function(Pointer<Utf8>, Pointer<Uint8>, int)
+      >('nauterm_android_register_credential_key');
   for (final account in ['local-database-key', 'device-key']) {
     final platformBytes = await _credentialChannel.invokeMethod<Uint8List>(
-      'getOrCreateKey', {'account': account},
+      'getOrCreateKey',
+      {'account': account},
     );
     if (platformBytes == null || platformBytes.length != 32) {
       throw StateError('Android secure credential storage is unavailable');
@@ -85,48 +87,54 @@ class _AndroidNautermRoot extends StatefulWidget {
 }
 
 class _AndroidNautermRootState extends State<_AndroidNautermRoot>
-    implements NautermRootController {
+    implements windowing.NautermRootController {
   final NautermWorkspaceController _workspaceController =
       NautermWorkspaceController();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   bool _settingsOpen = false;
 
   @override
   void initState() {
     super.initState();
-    registerNautermRoot(this);
+    windowing.registerNautermRoot(this);
   }
 
   @override
   void dispose() {
-    unregisterNautermRoot(this);
+    windowing.unregisterNautermRoot(this);
     _workspaceController.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_settingsOpen,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && _settingsOpen) hideSettingsWindow();
-    },
-    child: NautermApp(
-      workspaceController: _workspaceController,
-      onOpenSettings: showSettingsWindow,
-      onOpenTerminalSettings: showSettingsWindow,
-      settingsOverlay: _settingsOpen
-          ? const Material(child: SafeArea(child: SettingsPanel()))
-          : null,
+  Widget build(BuildContext context) => NautermApp(
+    navigatorKey: _navigatorKey,
+    workspaceController: _workspaceController,
+    onOpenSettings: showSettingsWindow,
+    onOpenTerminalSettings: () => windowing.showSettingsWindow(
+      page: windowing.NautermSettingsPage.terminal,
     ),
   );
 
   @override
   void showSettingsWindow() {
-    if (mounted) setState(() => _settingsOpen = true);
+    if (_settingsOpen) return;
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    _settingsOpen = true;
+    navigator
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                const Scaffold(body: SafeArea(child: SettingsPanel())),
+          ),
+        )
+        .whenComplete(() => _settingsOpen = false);
   }
 
   @override
   void hideSettingsWindow() {
-    if (mounted) setState(() => _settingsOpen = false);
+    if (_settingsOpen) _navigatorKey.currentState?.pop();
   }
 
   @override
